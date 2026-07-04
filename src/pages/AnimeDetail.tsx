@@ -1,0 +1,202 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { fetchAnimeDetails, fetchAnimeReviews, Anime } from '../lib/jikan';
+import { useAuth } from '../hooks/useAuth';
+import { doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { ArrowLeft, Star, Calendar as CalendarIcon, Clock, Tv, Plus, Check, Bookmark } from 'lucide-react';
+import { motion } from 'motion/react';
+
+export default function AnimeDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user, login } = useAuth();
+  
+  const [anime, setAnime] = useState<Anime | null>(null);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savedStatus, setSavedStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (id) {
+      loadDetails(Number(id));
+      if (user) checkSavedStatus(Number(id));
+    }
+  }, [id, user]);
+
+  const loadDetails = async (animeId: number) => {
+    try {
+      const data = await fetchAnimeDetails(animeId);
+      setAnime(data);
+      const reviewsData = await fetchAnimeReviews(animeId);
+      setReviews(reviewsData.slice(0, 3)); // show top 3
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSavedStatus = async (animeId: number) => {
+    if (!user) return;
+    const path = `users/${user.uid}/animeList/${animeId}`;
+    try {
+      const docRef = doc(db, 'users', user.uid, 'animeList', String(animeId));
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setSavedStatus(docSnap.data().status);
+      }
+    } catch (error) {
+      console.error(error);
+      handleFirestoreError(error, OperationType.GET, path);
+    }
+  };
+
+  const saveAnime = async (status: string) => {
+    if (!user) {
+      login();
+      return;
+    }
+    if (!anime) return;
+    
+    const path = `users/${user.uid}/animeList/${anime.mal_id}`;
+    try {
+      const docRef = doc(db, 'users', user.uid, 'animeList', String(anime.mal_id));
+      await setDoc(docRef, {
+        mal_id: anime.mal_id,
+        title: anime.title,
+        image_url: anime.images.jpg.large_image_url,
+        episodes: anime.episodes,
+        status: status,
+        airing: anime.airing ?? false,
+        animeStatus: anime.status ?? '',
+        broadcast: anime.broadcast,
+        score: anime.score,
+        addedAt: new Date().toISOString()
+      });
+      setSavedStatus(status);
+    } catch (error) {
+      console.error(error);
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  };
+
+  const removeAnime = async () => {
+    if (!user || !anime) return;
+    const path = `users/${user.uid}/animeList/${anime.mal_id}`;
+    try {
+      const docRef = doc(db, 'users', user.uid, 'animeList', String(anime.mal_id));
+      await deleteDoc(docRef);
+      setSavedStatus(null);
+    } catch (error) {
+      console.error(error);
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  };
+
+  if (loading || !anime) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-6">
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-400 hover:text-white">
+        <ArrowLeft size={20} />
+        <span className="text-sm font-bold uppercase tracking-wider">Volver</span>
+      </button>
+
+      <div className="flex gap-4">
+        <div className="w-1/3 shrink-0">
+          <img
+            src={anime.images.jpg.large_image_url}
+            alt={anime.title}
+            className="w-full rounded-2xl border border-slate-800 shadow-lg shadow-black/50"
+          />
+        </div>
+        <div className="space-y-3 pt-2">
+          <h1 className="text-2xl font-bold leading-tight">{anime.title}</h1>
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-1 text-xs font-bold bg-slate-900 px-2 py-1 rounded-md border border-slate-800 text-slate-300">
+              <Star size={12} className="text-amber-400 fill-amber-400" />
+              <span className="text-amber-400">{anime.score || 'N/A'}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs font-bold bg-indigo-500/20 px-2 py-1 rounded-md text-indigo-400 uppercase">
+              <Tv size={12} />
+              <span>{(anime.airing || anime.status === 'Currently Airing') ? 'En Emisión' : (anime.status === 'Not yet aired' ? 'Próximamente' : (anime.episodes ? `${anime.episodes} eps` : 'Finalizado'))}</span>
+            </div>
+          </div>
+          {anime.broadcast?.string && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+              <Clock size={12} className="text-indigo-400" />
+              <span>{anime.broadcast.string}</span>
+            </div>
+          )}
+          {anime.aired?.string && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+              <CalendarIcon size={12} className="text-indigo-400" />
+              <span>{anime.aired.string}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        {savedStatus === 'watching' ? (
+          <button onClick={removeAnime} className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 shadow-lg shadow-green-900/20">
+            <Check size={18} /> Viendo
+          </button>
+        ) : (
+          <button onClick={() => saveAnime('watching')} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-2xl flex justify-center items-center gap-2 transition-colors shadow-lg shadow-indigo-500/20">
+            <Plus size={18} /> Ver
+          </button>
+        )}
+
+        {savedStatus === 'plan_to_watch' ? (
+          <button onClick={removeAnime} className="flex-1 bg-slate-800/50 text-slate-400 border border-slate-700 font-bold py-3 rounded-2xl flex justify-center items-center gap-2">
+            <Check size={18} /> Planeado
+          </button>
+        ) : (
+          <button onClick={() => saveAnime('plan_to_watch')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 transition-colors border border-slate-700">
+            <Bookmark size={18} /> Por Ver
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-2 bg-slate-900/50 p-4 rounded-3xl border border-slate-800">
+        <h3 className="font-bold text-lg text-indigo-400">Sinopsis</h3>
+        <p className="text-sm text-slate-400 leading-relaxed">
+          {anime.synopsis || 'Sinopsis no disponible.'}
+        </p>
+      </div>
+
+      {reviews.length > 0 && (
+        <div className="space-y-4 pt-4">
+          <h3 className="font-bold text-lg px-2">Reseñas Destacadas</h3>
+          <div className="space-y-3">
+            {reviews.map((rev: any, i: number) => (
+              <div key={`${rev.mal_id}-${i}`} className="bg-slate-950/50 border border-slate-800/50 p-4 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-slate-800 overflow-hidden">
+                    <img src={rev.user.images.jpg.image_url} alt={rev.user.username} className="object-cover w-full h-full" />
+                  </div>
+                  <span className="text-xs font-bold">{rev.user.username}</span>
+                  <div className="ml-auto flex items-center gap-1 text-xs font-bold text-amber-400">
+                    <Star size={12} className="fill-amber-400" />
+                    {rev.score}
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400 italic line-clamp-4 leading-relaxed">
+                  "{rev.review}"
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}

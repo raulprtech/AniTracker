@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "AnimeListItem": {
+      "title": "AnimeListItem",
+      "description": "An anime item saved in a user's track list",
+      "type": "object",
+      "properties": {
+        "mal_id": {
+          "type": "integer",
+          "description": "MyAnimeList ID of the anime"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the anime"
+        },
+        "image_url": {
+          "type": "string",
+          "description": "Image URL of the anime"
+        },
+        "episodes": {
+          "type": "integer",
+          "description": "Number of episodes"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["watching", "plan_to_watch"],
+          "description": "Watch status of the anime"
+        },
+        "broadcast": {
+          "type": "object",
+          "description": "Broadcast details"
+        },
+        "score": {
+          "type": "number",
+          "description": "MyAnimeList score"
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the anime was added"
+        }
+      },
+      "required": ["mal_id", "title", "image_url", "status", "addedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/animeList/{animeId}": {
+      "schema": "AnimeListItem",
+      "description": "A collection storing tracked anime items for each user"
+    }
+  }
+}
