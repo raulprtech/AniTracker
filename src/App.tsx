@@ -17,10 +17,10 @@ function Layout({ children }: { children: React.ReactNode }) {
         <div className="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <span className="font-bold text-lg text-white">A</span>
+              <span className="font-bold text-lg text-white">W</span>
             </div>
             <Link to="/" className="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-              AniTracker
+              Weekly Anime
             </Link>
           </div>
           <nav className="flex items-center gap-4">
