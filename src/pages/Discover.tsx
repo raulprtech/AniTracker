@@ -27,6 +27,7 @@ export default function Discover() {
   const [animes, setAnimes] = useState<Anime[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [query, setQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('now');
@@ -71,8 +72,9 @@ export default function Discover() {
       const res = await fetchCurrentSeason(1);
 
       if (res && res.data) {
-        setAnimes(res.data);
-        setHasNextPage(res.pagination.has_next_page);
+        const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
+        setAnimes(uniqueData);
+        setHasNextPage(true); // Always true for seasonal content to allow loading previous seasons on scroll
       }
     } catch (err: any) {
       console.error("Error loading initial data:", err);
@@ -122,8 +124,12 @@ export default function Discover() {
         res = await fetchCurrentSeason(pageNum);
       }
     } else if (filterType === 'last') {
-      const prev = getPreviousSeason();
-      res = await fetchSeason(prev.year, prev.season, pageNum);
+      if (activeYear && activeSeason) {
+        res = await fetchSeason(activeYear, activeSeason, pageNum);
+      } else {
+        const prev = getPreviousSeason();
+        res = await fetchSeason(prev.year, prev.season, pageNum);
+      }
     } else if (filterType === 'top') {
       res = await fetchTopAnime(pageNum);
     } else if (filterType === 'genre' && selectedGenre) {
@@ -164,8 +170,13 @@ export default function Discover() {
         res = await fetchCurrentSeason(1);
       }
 
-      setAnimes(res.data);
-      setHasNextPage(res.pagination.has_next_page);
+      const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
+      setAnimes(uniqueData);
+      if (type === 'now' || type === 'last') {
+        setHasNextPage(true); // Always true for seasonal content to allow loading previous seasons on scroll
+      } else {
+        setHasNextPage(res.pagination.has_next_page);
+      }
     } catch (err: any) {
       console.error(err);
       let msg = err.message || "Error al cargar los datos";
@@ -181,12 +192,16 @@ export default function Discover() {
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasNextPage) return;
     setLoadingMore(true);
+    setLoadMoreError(null);
     const nextPage = page + 1;
     
     try {
       const res = await fetchWithCurrentState(nextPage);
       setAnimes(prev => {
-        const newAnimes = res.data.filter(a => !prev.some(p => p.mal_id === a.mal_id));
+        const uniqueNew = res.data.filter((a, i, self) => 
+          self.findIndex(t => t.mal_id === a.mal_id) === i
+        );
+        const newAnimes = uniqueNew.filter(a => !prev.some(p => p.mal_id === a.mal_id));
         return [...prev, ...newAnimes];
       });
       
@@ -194,10 +209,14 @@ export default function Discover() {
         setHasNextPage(true);
         setPage(nextPage);
       } else {
-        if (filterType === 'now') {
-          const currentSeasonInfo = activeYear && activeSeason 
+        if (filterType === 'now' || filterType === 'last') {
+          let currentSeasonInfo = activeYear && activeSeason 
             ? { year: activeYear, season: activeSeason }
             : getCurrentSeasonAndYear();
+            
+          if (filterType === 'last' && !activeYear && !activeSeason) {
+             currentSeasonInfo = getPreviousSeason();
+          }
             
           const prevSeasonInfo = getPreviousSeasonBefore(currentSeasonInfo.year, currentSeasonInfo.season);
           
@@ -210,8 +229,15 @@ export default function Discover() {
           setPage(nextPage);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading more:", error);
+      let msg = "Error al cargar más datos";
+      if (error?.message?.includes("504") || error?.message?.includes("500") || error?.message?.includes("Failed to fetch")) {
+        msg = "El servidor no responde. Intenta de nuevo.";
+      } else if (error?.message?.includes("429")) {
+        msg = "Límite de peticiones alcanzado. Intenta de nuevo en unos segundos.";
+      }
+      setLoadMoreError(msg);
     } finally {
       setLoadingMore(false);
     }
@@ -252,7 +278,8 @@ export default function Discover() {
     setActiveSeason(null);
     try {
       const res = await searchAnime(query, 1);
-      setAnimes(res.data);
+      const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
+      setAnimes(uniqueData);
       setHasNextPage(res.pagination.has_next_page);
     } catch (err: any) {
       console.error(err);
@@ -447,8 +474,19 @@ export default function Discover() {
           </div>
           
           {hasNextPage && (
-            <div ref={sentinelRef} className="flex justify-center py-6">
+            <div ref={sentinelRef} className="flex flex-col items-center justify-center py-6 space-y-4">
               {loadingMore && <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />}
+              {loadMoreError && !loadingMore && (
+                <div className="text-center space-y-2">
+                  <p className="text-red-400 text-sm">{loadMoreError}</p>
+                  <button 
+                    onClick={loadMore}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition-colors shadow-lg shadow-indigo-500/20"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {!hasNextPage && animes.length > 0 && (

@@ -30,6 +30,9 @@ export interface PaginatedResult<T> {
 const cache = new Map<string, { data: any, timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 
+// Map of active promises for deduplication
+const activePromises = new Map<string, Promise<any>>();
+
 // Global queue to prevent concurrent Jikan API requests (max 3 per second)
 const queue: (() => Promise<void>)[] = [];
 let isProcessingQueue = false;
@@ -51,18 +54,23 @@ async function processQueue() {
 }
 
 // Helper to handle rate limits and timeouts (Jikan returns 429 or times out)
-async function fetchWithRetry(url: string, retries = 1, delay = 300): Promise<any> {
+async function fetchWithRetry(url: string, retries = 4, delay = 1000): Promise<any> {
   const cached = cache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data;
   }
 
-  return new Promise((resolve, reject) => {
+  let activePromise = activePromises.get(url);
+  if (activePromise) {
+    return activePromise;
+  }
+
+  activePromise = new Promise((resolve, reject) => {
     queue.push(async () => {
       try {
         const attemptFetch = async (currentRetries: number, currentDelay: number): Promise<any> => {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout to prevent hanging
+          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout to prevent hanging
 
           try {
             const res = await fetch(url, { signal: controller.signal });
@@ -78,7 +86,12 @@ async function fetchWithRetry(url: string, retries = 1, delay = 300): Promise<an
             }
             const data = await res.json();
             if (data && (data.status === 429 || data.status >= 400)) {
-              throw new Error(`API Internal Error: ${data.status} - ${data.message || ''}`);
+              if (currentRetries > 0) {
+                 console.warn(`Jikan Internal Error (${data.status}), retrying in ${currentDelay}ms...`);
+                 await new Promise(r => setTimeout(r, currentDelay));
+                 return attemptFetch(currentRetries - 1, currentDelay * 1.5);
+              }
+              throw new Error(`API Error: ${data.status}`);
             }
             cache.set(url, { data, timestamp: Date.now() });
             return data;
@@ -101,15 +114,20 @@ async function fetchWithRetry(url: string, retries = 1, delay = 300): Promise<an
         } else {
           reject(error);
         }
+      } finally {
+        activePromises.delete(url);
       }
     });
     processQueue();
   });
+
+  activePromises.set(url, activePromise);
+  return activePromise;
 }
 
 function getFallbackSeasonalAnimePage(page: number): PaginatedResult<Anime> {
   const items = FALLBACK_CURRENT_SEASON_ANIME;
-  const limit = 10;
+  const limit = 25;
   const startIndex = (page - 1) * limit;
   const endIndex = page * limit;
   
@@ -136,8 +154,8 @@ function getFallbackSeasonalAnimeForSeason(year: number, season: string, page: n
   const diff = Math.max(0, currentScore - requestedScore);
   const ALL_FALLBACK_ANIME = [...FALLBACK_CURRENT_SEASON_ANIME, ...FALLBACK_ANIME_DATA];
   
-  const itemsPerSeason = 10;
-  const startIndex = (10 + (diff - 1) * itemsPerSeason) % ALL_FALLBACK_ANIME.length;
+  const itemsPerSeason = 25;
+  const startIndex = (25 + (diff - 1) * itemsPerSeason) % ALL_FALLBACK_ANIME.length;
   
   const data: Anime[] = [];
   for (let i = 0; i < itemsPerSeason; i++) {
@@ -273,7 +291,8 @@ export async function fetchAnimeDetails(id: number): Promise<Anime> {
     const data = await fetchWithRetry(`${API_URL}/anime/${id}/full`);
     return data.data;
   } catch (error) {
-    const fallback = FALLBACK_ANIME_DATA.find(a => a.mal_id === id);
+    const ALL_ANIME = [...FALLBACK_CURRENT_SEASON_ANIME, ...FALLBACK_ANIME_DATA];
+    const fallback = ALL_ANIME.find(a => a.mal_id === id);
     if (fallback) return fallback as unknown as Anime;
     throw error;
   }

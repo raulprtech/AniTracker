@@ -266,44 +266,6 @@ export const FALLBACK_CURRENT_SEASON_ANIME = [
     }
   },
   {
-    "mal_id": 62542,
-    "title": "Grand Blue Season 3",
-    "images": {
-      "jpg": {
-        "image_url": "https://cdn.myanimelist.net/images/anime/1615/158194.jpg",
-        "large_image_url": "https://cdn.myanimelist.net/images/anime/1615/158194l.jpg"
-      }
-    },
-    "synopsis": "Third season of Grand Blue.",
-    "score": 8.41,
-    "episodes": 12,
-    "status": "Currently Airing",
-    "airing": true,
-    "aired": {
-      "from": "2026-07-07T00:00:00+00:00",
-      "to": null,
-      "prop": {
-        "from": {
-          "day": 7,
-          "month": 7,
-          "year": 2026
-        },
-        "to": {
-          "day": null,
-          "month": null,
-          "year": null
-        }
-      },
-      "string": "Jul 7, 2026 to ?"
-    },
-    "broadcast": {
-      "day": "Tuesdays",
-      "time": "00:00",
-      "timezone": "Asia/Tokyo",
-      "string": "Tuesdays at 00:00 (JST)"
-    }
-  },
-  {
     "mal_id": 63832,
     "title": "Seihantai na Kimi to Boku 2nd Season",
     "images": {
