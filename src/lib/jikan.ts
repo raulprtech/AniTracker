@@ -15,6 +15,8 @@ export interface Anime {
   aired: { from: string; to: string; string: string };
   broadcast: { day: string; time: string; timezone: string; string: string };
   streaming?: { name: string; url: string }[];
+  nextAiringEpisode?: { airingAt: number; episode: number } | null;
+  airingSourceUrl?: string;
 }
 
 export interface Pagination {
@@ -190,6 +192,8 @@ interface AniListMedia {
   status: string | null;
   startDate: AniListDate;
   endDate: AniListDate;
+  nextAiringEpisode: { airingAt: number; episode: number } | null;
+  siteUrl: string | null;
 }
 
 const AIRING_ANIME_QUERY = `
@@ -216,6 +220,8 @@ const AIRING_ANIME_QUERY = `
         status
         startDate { year month day }
         endDate { year month day }
+        nextAiringEpisode { airingAt episode }
+        siteUrl
       }
     }
   }
@@ -278,7 +284,9 @@ function mapAniListAnime(media: AniListMedia): Anime | null {
       string: [startDate, endDate].filter(Boolean).join(' - ')
     },
     broadcast: { day: '', time: '', timezone: '', string: '' },
-    streaming: []
+    streaming: [],
+    nextAiringEpisode: media.nextAiringEpisode,
+    airingSourceUrl: media.siteUrl || undefined
   };
 }
 
@@ -492,10 +500,68 @@ export async function searchAnime(query: string, page: number = 1): Promise<Pagi
   }
 }
 
+const ANILIST_AIRING_DETAILS_QUERY = `
+  query AnimeAiringDetails($idMal: Int!) {
+    Media(idMal: $idMal, type: ANIME) {
+      nextAiringEpisode { airingAt episode }
+      siteUrl
+    }
+  }
+`;
+
+async function fetchAniListAiringDetails(
+  idMal: number
+): Promise<Pick<Anime, 'nextAiringEpisode' | 'airingSourceUrl'>> {
+  const cacheKey = `anilist:airing-details:${idMal}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(ANILIST_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: ANILIST_AIRING_DETAILS_QUERY,
+        variables: { idMal }
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`AniList API Error: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (payload.errors?.length) {
+      throw new Error(payload.errors[0].message || 'AniList GraphQL Error');
+    }
+
+    const result = {
+      nextAiringEpisode: payload.data?.Media?.nextAiringEpisode || null,
+      airingSourceUrl: payload.data?.Media?.siteUrl || undefined
+    };
+    cache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function fetchAnimeDetails(id: number): Promise<Anime> {
   try {
-    const data = await fetchWithRetry(`${API_URL}/anime/${id}/full`);
-    return data.data;
+    const [data, airingDetails] = await Promise.all([
+      fetchWithRetry(`${API_URL}/anime/${id}/full`),
+      fetchAniListAiringDetails(id).catch(error => {
+        console.warn('Could not corroborate airing time with AniList', error);
+        return {};
+      })
+    ]);
+    return { ...data.data, ...airingDetails };
   } catch (error) {
     const ALL_ANIME = [...FALLBACK_CURRENT_SEASON_ANIME, ...FALLBACK_ANIME_DATA];
     const fallback = ALL_ANIME.find(a => a.mal_id === id);

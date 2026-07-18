@@ -4,8 +4,9 @@ import { fetchAnimeDetails, fetchAnimeReviews, Anime } from '../lib/jikan';
 import { useAuth } from '../hooks/useAuth';
 import { doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { ArrowLeft, Star, Calendar as CalendarIcon, Clock, Tv, Plus, Check, Bookmark } from 'lucide-react';
+import { ArrowLeft, Star, Calendar as CalendarIcon, Clock, Tv, Plus, Check, Bookmark, ExternalLink } from 'lucide-react';
 import { motion } from 'motion/react';
+import { getLocalAiringInfo } from '../lib/airingTime';
 
 function createAnimeSnapshot(anime: Anime): Anime {
   const imageUrl = anime.images?.jpg?.image_url || '';
@@ -39,7 +40,9 @@ function createAnimeSnapshot(anime: Anime): Anime {
     streaming: (anime.streaming || []).map(platform => ({
       name: platform.name || '',
       url: platform.url || ''
-    }))
+    })),
+    nextAiringEpisode: anime.nextAiringEpisode || null,
+    airingSourceUrl: anime.airingSourceUrl || ''
   };
 }
 
@@ -72,7 +75,9 @@ function getAnimeFromListItem(data: any, animeId: number): Anime {
     airing: stored.airing ?? data.airing ?? false,
     aired: stored.aired || data.aired || { from: '', to: '', string: '' },
     broadcast: stored.broadcast || data.broadcast || { day: '', time: '', timezone: '', string: '' },
-    streaming: stored.streaming || data.streaming || []
+    streaming: stored.streaming || data.streaming || [],
+    nextAiringEpisode: stored.nextAiringEpisode || data.nextAiringEpisode || null,
+    airingSourceUrl: stored.airingSourceUrl || data.airingSourceUrl
   });
 }
 
@@ -165,6 +170,8 @@ export default function AnimeDetail() {
         synopsis: animeSnapshot.synopsis,
         aired: animeSnapshot.aired,
         streaming: animeSnapshot.streaming,
+        nextAiringEpisode: animeSnapshot.nextAiringEpisode,
+        airingSourceUrl: animeSnapshot.airingSourceUrl || '',
         anime: animeSnapshot,
         addedAt: new Date().toISOString()
       }, { merge: true });
@@ -215,6 +222,8 @@ export default function AnimeDetail() {
     );
   }
 
+  const localAiring = getLocalAiringInfo(anime);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-6">
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-400 hover:text-white">
@@ -242,10 +251,22 @@ export default function AnimeDetail() {
               <span>{(anime.airing || anime.status === 'Currently Airing') ? 'En Emisión' : (anime.status === 'Not yet aired' ? 'Próximamente' : (anime.episodes ? `${anime.episodes} eps` : 'Finalizado'))}</span>
             </div>
           </div>
-          {anime.broadcast?.string && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-              <Clock size={12} className="text-indigo-400" />
-              <span>{anime.broadcast.string}</span>
+          {localAiring && (
+            <div className="flex items-start gap-1.5 text-xs text-slate-400 font-medium">
+              <Clock size={12} className="text-indigo-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p>{localAiring.dateLabel}, {localAiring.timeLabel}</p>
+                <p className="text-[10px] text-slate-500">{localAiring.timeZone}</p>
+                <a
+                  href={localAiring.verificationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300"
+                >
+                  Verificar en {localAiring.sourceLabel}
+                  <ExternalLink size={10} />
+                </a>
+              </div>
             </div>
           )}
           {anime.aired?.string && (
