@@ -7,17 +7,19 @@ import { Calendar as CalendarIcon, Loader2, Clock } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function Schedule() {
-  const { user, login } = useAuth();
+  const { user, login, loading: authLoading } = useAuth();
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     if (user) {
+      setLoading(true);
       loadList();
     } else {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const loadList = async () => {
     const path = `users/${user!.uid}/animeList`;
@@ -33,16 +35,6 @@ export default function Schedule() {
       setLoading(false);
     }
   };
-
-  if (!user) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-        <CalendarIcon size={48} className="text-slate-600" />
-        <p className="text-slate-400">Inicia sesión para ver tu agenda.</p>
-        <button onClick={login} className="bg-indigo-600 hover:bg-indigo-500 transition-colors px-6 py-2 rounded-2xl font-bold shadow-lg shadow-indigo-600/20">Iniciar Sesión</button>
-      </div>
-    );
-  }
 
   if (loading) {
     return (
@@ -65,6 +57,16 @@ export default function Schedule() {
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <CalendarIcon size={48} className="text-slate-600" />
+        <p className="text-slate-400">Inicia sesión para ver tu agenda.</p>
+        <button onClick={login} className="bg-indigo-600 hover:bg-indigo-500 transition-colors px-6 py-2 rounded-2xl font-bold shadow-lg shadow-indigo-600/20">Iniciar Sesión</button>
       </div>
     );
   }

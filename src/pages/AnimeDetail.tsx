@@ -17,6 +17,7 @@ export default function AnimeDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -67,6 +68,7 @@ export default function AnimeDetail() {
     }
     if (!anime) return;
     
+    setIsSaving(status);
     const path = `users/${user.uid}/animeList/${anime.mal_id}`;
     try {
       const docRef = doc(db, 'users', user.uid, 'animeList', String(anime.mal_id));
@@ -86,11 +88,14 @@ export default function AnimeDetail() {
     } catch (error) {
       console.error(error);
       handleFirestoreError(error, OperationType.WRITE, path);
+    } finally {
+      setIsSaving(null);
     }
   };
 
   const removeAnime = async () => {
     if (!user || !anime) return;
+    setIsSaving('removing');
     const path = `users/${user.uid}/animeList/${anime.mal_id}`;
     try {
       const docRef = doc(db, 'users', user.uid, 'animeList', String(anime.mal_id));
@@ -99,6 +104,8 @@ export default function AnimeDetail() {
     } catch (error) {
       console.error(error);
       handleFirestoreError(error, OperationType.DELETE, path);
+    } finally {
+      setIsSaving(null);
     }
   };
 
@@ -168,22 +175,22 @@ export default function AnimeDetail() {
 
       <div className="flex gap-2">
         {savedStatus === 'watching' ? (
-          <button onClick={removeAnime} className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 shadow-lg shadow-green-900/20">
-            <Check size={18} /> Viendo
+          <button onClick={removeAnime} disabled={isSaving === 'removing'} className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 shadow-lg shadow-green-900/20 disabled:opacity-50">
+            {isSaving === 'removing' ? <div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div> : <><Check size={18} /> Viendo</>}
           </button>
         ) : (
-          <button onClick={() => saveAnime('watching')} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-2xl flex justify-center items-center gap-2 transition-colors shadow-lg shadow-indigo-500/20">
-            <Plus size={18} /> Ver
+          <button onClick={() => saveAnime('watching')} disabled={isSaving === 'watching'} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-2xl flex justify-center items-center gap-2 transition-colors shadow-lg shadow-indigo-500/20 disabled:opacity-50">
+            {isSaving === 'watching' ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <><Plus size={18} /> Ver</>}
           </button>
         )}
 
         {savedStatus === 'plan_to_watch' ? (
-          <button onClick={removeAnime} className="flex-1 bg-slate-800/50 text-slate-400 border border-slate-700 font-bold py-3 rounded-2xl flex justify-center items-center gap-2">
-            <Check size={18} /> Planeado
+          <button onClick={removeAnime} disabled={isSaving === 'removing'} className="flex-1 bg-slate-800/50 text-slate-400 border border-slate-700 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 disabled:opacity-50">
+            {isSaving === 'removing' ? <div className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div> : <><Check size={18} /> Planeado</>}
           </button>
         ) : (
-          <button onClick={() => saveAnime('plan_to_watch')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 transition-colors border border-slate-700">
-            <Bookmark size={18} /> Por Ver
+          <button onClick={() => saveAnime('plan_to_watch')} disabled={isSaving === 'plan_to_watch'} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 transition-colors border border-slate-700 disabled:opacity-50">
+            {isSaving === 'plan_to_watch' ? <div className="w-5 h-5 border-2 border-slate-300 border-t-transparent rounded-full animate-spin"></div> : <><Bookmark size={18} /> Ver luego</>}
           </button>
         )}
       </div>

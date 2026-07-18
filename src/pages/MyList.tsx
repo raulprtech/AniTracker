@@ -8,17 +8,19 @@ import { Tv, Star } from 'lucide-react';
 import SkeletonAnimeCard from '../components/SkeletonAnimeCard';
 
 export default function MyList() {
-  const { user, login } = useAuth();
+  const { user, login, loading: authLoading } = useAuth();
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     if (user) {
+      setLoading(true);
       loadList();
     } else {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const loadList = async () => {
     const path = `users/${user!.uid}/animeList`;
@@ -35,15 +37,6 @@ export default function MyList() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-        <p className="text-slate-400">Inicia sesión para seguir tu lista de anime.</p>
-        <button onClick={login} className="bg-indigo-600 px-6 py-2 rounded-2xl font-bold shadow-lg shadow-indigo-600/20">Iniciar Sesión</button>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="space-y-8 pb-6">
@@ -57,6 +50,15 @@ export default function MyList() {
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <p className="text-slate-400">Inicia sesión para seguir tu lista de anime.</p>
+        <button onClick={login} className="bg-indigo-600 px-6 py-2 rounded-2xl font-bold shadow-lg shadow-indigo-600/20">Iniciar Sesión</button>
       </div>
     );
   }
@@ -105,7 +107,7 @@ export default function MyList() {
         <h1 className="text-2xl font-bold tracking-tight">Mi Lista</h1>
       </div>
       {renderSection("Viendo", watching)}
-      {renderSection("Por Ver", planned)}
+      {renderSection("Ver luego", planned)}
     </div>
   );
 }

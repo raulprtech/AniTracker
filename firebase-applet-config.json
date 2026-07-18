@@ -6,6 +6,6 @@
   "messagingSenderId": "658267433605",
   "appId": "1:658267433605:web:571f091fda2bc96b6dd7ec",
   "measurementId": "G-8KDY92NWPP",
-  "databaseId": "ai-studio-b9f70b49-8abb-4b9c-bae3-1df227488c01",
-  "firestoreDatabaseId": "ai-studio-b9f70b49-8abb-4b9c-bae3-1df227488c01"
+  "databaseId": "(default)",
+  "firestoreDatabaseId": "(default)"
 }
