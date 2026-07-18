@@ -1,6 +1,7 @@
 import { FALLBACK_ANIME_DATA, FALLBACK_CURRENT_SEASON_ANIME, FALLBACK_GENRES } from './fallbackData';
 
 export const API_URL = 'https://api.jikan.moe/v4';
+const ANILIST_API_URL = 'https://graphql.anilist.co';
 
 export interface Anime {
   mal_id: number;
@@ -173,30 +174,215 @@ function getFallbackSeasonalAnimeForSeason(year: number, season: string, page: n
   };
 }
 
+type AniListSeason = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
+
+interface AniListDate {
+  year: number | null;
+  month: number | null;
+  day: number | null;
+}
+
+interface AniListMedia {
+  idMal: number | null;
+  title: { romaji: string | null; english: string | null };
+  coverImage: { extraLarge: string | null; large: string | null };
+  description: string | null;
+  averageScore: number | null;
+  episodes: number | null;
+  status: string | null;
+  startDate: AniListDate;
+  endDate: AniListDate;
+}
+
+const CURRENT_SEASON_QUERY = `
+  query CurrentSeason($page: Int!, $season: MediaSeason!, $year: Int!) {
+    Page(page: $page, perPage: 25) {
+      pageInfo {
+        currentPage
+        lastPage
+        hasNextPage
+      }
+      media(
+        type: ANIME
+        season: $season
+        seasonYear: $year
+        isAdult: false
+        sort: [POPULARITY_DESC]
+      ) {
+        idMal
+        title { romaji english }
+        coverImage { extraLarge large }
+        description(asHtml: false)
+        averageScore
+        episodes
+        status
+        startDate { year month day }
+        endDate { year month day }
+      }
+    }
+  }
+`;
+
+function getCurrentAniListSeason(date = new Date()): { season: AniListSeason; year: number } {
+  const seasons: AniListSeason[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
+  return {
+    season: seasons[Math.floor(date.getMonth() / 3)],
+    year: date.getFullYear()
+  };
+}
+
+function formatAniListDate(date: AniListDate): string {
+  if (!date.year) return '';
+  const month = String(date.month || 1).padStart(2, '0');
+  const day = String(date.day || 1).padStart(2, '0');
+  return `${date.year}-${month}-${day}`;
+}
+
+function mapAniListStatus(status: string | null): string {
+  if (status === 'RELEASING') return 'Currently Airing';
+  if (status === 'NOT_YET_RELEASED') return 'Not yet aired';
+  if (status === 'HIATUS') return 'On Hiatus';
+  return 'Finished Airing';
+}
+
+function mapAniListAnime(media: AniListMedia): Anime | null {
+  if (!media.idMal) return null;
+
+  const startDate = formatAniListDate(media.startDate);
+  const endDate = formatAniListDate(media.endDate);
+  const image = media.coverImage.extraLarge || media.coverImage.large || '';
+
+  return {
+    mal_id: media.idMal,
+    title: media.title.english || media.title.romaji || 'Sin titulo',
+    images: {
+      jpg: {
+        image_url: media.coverImage.large || image,
+        large_image_url: image
+      }
+    },
+    synopsis: media.description || '',
+    score: media.averageScore ? media.averageScore / 10 : 0,
+    episodes: media.episodes || 0,
+    status: mapAniListStatus(media.status),
+    airing: media.status === 'RELEASING',
+    aired: {
+      from: startDate,
+      to: endDate,
+      string: [startDate, endDate].filter(Boolean).join(' - ')
+    },
+    broadcast: { day: '', time: '', timezone: '', string: '' },
+    streaming: []
+  };
+}
+
+async function fetchAniListCurrentSeason(page: number): Promise<PaginatedResult<Anime>> {
+  const { season, year } = getCurrentAniListSeason();
+  const cacheKey = `anilist:current-season:${year}:${season}:${page}`;
+  const cached = cache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  const existingPromise = activePromises.get(cacheKey);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const request = (async () => {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      try {
+        const response = await fetch(ANILIST_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: CURRENT_SEASON_QUERY,
+            variables: { page, season, year }
+          }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`AniList API Error: ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (payload.errors?.length) {
+          throw new Error(payload.errors[0].message || 'AniList GraphQL Error');
+        }
+
+        const media: AniListMedia[] = payload.data?.Page?.media || [];
+        const pageInfo = payload.data?.Page?.pageInfo;
+        const anime = media
+          .map(mapAniListAnime)
+          .filter((item): item is Anime => item !== null);
+
+        const result: PaginatedResult<Anime> = {
+          data: anime,
+          pagination: {
+            last_visible_page: pageInfo?.lastPage || page,
+            has_next_page: Boolean(pageInfo?.hasNextPage)
+          }
+        };
+
+        cache.set(cacheKey, { data: result, timestamp: Date.now() });
+        return result;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    throw lastError;
+  })();
+
+  activePromises.set(cacheKey, request);
+
+  try {
+    return await request;
+  } finally {
+    activePromises.delete(cacheKey);
+  }
+}
+
 export async function fetchCurrentSeason(page: number = 1): Promise<PaginatedResult<Anime>> {
   try {
-    const data = await fetchWithRetry(
-      `${API_URL}/seasons/now?limit=25&page=${page}`,
-      page === 1 ? 1 : 2,
-      page === 1 ? 500 : 800,
-      page === 1 ? 5000 : 8000
-    );
-    const list: Anime[] = data.data || [];
-    return { 
-      data: list.filter((v, i, a) => a.findIndex(t => t.mal_id === v.mal_id) === i),
-      pagination: data.pagination || { last_visible_page: 1, has_next_page: false }
-    };
-  } catch (error) {
-    console.warn(`Using fallback current season anime data for fetchCurrentSeason page ${page}`);
-    const fallback = getFallbackSeasonalAnimePage(page);
-    if (fallback.data.length > 0) {
+    return await fetchAniListCurrentSeason(page);
+  } catch (aniListError) {
+    // Do not mix providers after page 1 because their ordering and pagination differ.
+    if (page > 1) throw aniListError;
+
+    try {
+      const data = await fetchWithRetry(
+        `${API_URL}/seasons/now?limit=25&page=1`,
+        1,
+        500,
+        5000
+      );
+      const list: Anime[] = data.data || [];
+      return {
+        data: list.filter((v, i, a) => a.findIndex(t => t.mal_id === v.mal_id) === i),
+        pagination: data.pagination || { last_visible_page: 1, has_next_page: false }
+      };
+    } catch (jikanError) {
+      console.warn('Using fallback current season anime data after both APIs failed');
+      const fallback = getFallbackSeasonalAnimePage(1);
       return {
         ...fallback,
         fromFallback: true,
         pagination: { ...fallback.pagination, has_next_page: true }
       };
     }
-    throw error;
   }
 }
 

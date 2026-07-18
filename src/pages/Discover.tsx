@@ -99,7 +99,7 @@ export default function Discover() {
         error?.message?.includes("500") ||
         error?.message?.includes("Failed to fetch")
       ) {
-        message = "Jikan no respondio al cargar la temporada completa. Puedes reintentar.";
+        message = "El servicio de anime no respondio al cargar la temporada completa. Puedes reintentar.";
       }
       setLoadMoreError(message);
       setHasNextPage(true);
