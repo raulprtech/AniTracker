@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, signInWithCustomToken, signOut, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { User, signInWithPopup, signOut, onAuthStateChanged, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
 interface AuthContextType {
@@ -16,14 +16,6 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
-export const inIframe = () => {
-  try {
-    return window.self !== window.top;
-  } catch (e) {
-    return true;
-  }
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,33 +30,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async () => {
     try {
-      const res = await fetch('/api/auth/token');
-      if (res.status === 401) {
-        if (inIframe()) {
-          alert('Please open the app in a new tab to sign in with Google (click the arrow icon in the top right of the preview).');
-          return;
-        }
-        window.location.href = '/.auth/login/google';
-        return;
-      }
-      const data = await res.json();
-      if (data.customToken) {
-        await signInWithCustomToken(auth, data.customToken);
-      }
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Login error:', error);
-      // Fallback to anonymous auth if everything fails
-      try {
-        await signInAnonymously(auth);
-      } catch (e) {
-        console.error('Anon login error', e);
-      }
     }
   };
 
   const logout = async () => {
-    await signOut(auth);
-    window.location.href = '/.auth/logout';
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (
@@ -75,3 +53,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+

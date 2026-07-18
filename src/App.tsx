@@ -6,6 +6,7 @@ import Discover from './pages/Discover';
 import MyList from './pages/MyList';
 import Schedule from './pages/Schedule';
 import AnimeDetail from './pages/AnimeDetail';
+import ScrollToTop from './components/ScrollToTop';
 
 function Layout({ children }: { children: React.ReactNode }) {
   const { user, login, logout } = useAuth();
@@ -48,6 +49,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           <NavItem to="/schedule" icon={<Calendar size={24} />} label="Agenda" />
         </div>
       </nav>
+      <ScrollToTop />
     </div>
   );
 }

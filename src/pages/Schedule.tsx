@@ -46,8 +46,25 @@ export default function Schedule() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="animate-spin text-indigo-500" size={32} />
+      <div className="space-y-6 pb-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Agenda Semanal</h1>
+          <p className="text-sm text-slate-400">Basado en tu lista "Viendo".</p>
+        </div>
+        <div className="space-y-4">
+          <div className="h-6 w-24 bg-slate-800 rounded animate-pulse"></div>
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-4">
+                <div className="w-16 h-20 bg-slate-800 rounded-lg animate-pulse flex-shrink-0"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-slate-800 rounded animate-pulse w-3/4"></div>
+                  <div className="h-4 bg-slate-800 rounded animate-pulse w-1/4"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -105,7 +122,7 @@ export default function Schedule() {
                   {dayAnimes.map((anime, i) => (
                     <Link to={`/anime/${anime.mal_id}`} key={`${anime.mal_id}-${i}`} className="block bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-4 hover:border-slate-600 transition-colors">
                       <div className="w-16 h-20 bg-slate-800 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={anime.image_url} alt={anime.title} className="w-full h-full object-cover" />
+                        <img src={anime.image_url} alt={anime.title} className="w-full h-full object-cover" loading="lazy" />
                       </div>
                       
                       <div className="flex-1">

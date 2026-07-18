@@ -5,6 +5,7 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Tv, Star } from 'lucide-react';
+import SkeletonAnimeCard from '../components/SkeletonAnimeCard';
 
 export default function MyList() {
   const { user, login } = useAuth();
@@ -45,8 +46,17 @@ export default function MyList() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
+      <div className="space-y-8 pb-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Mi Lista</h1>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            {[...Array(6)].map((_, i) => (
+              <SkeletonAnimeCard key={`skeleton-${i}`} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

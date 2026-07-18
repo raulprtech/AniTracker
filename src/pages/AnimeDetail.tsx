@@ -15,6 +15,7 @@ export default function AnimeDetail() {
   const [anime, setAnime] = useState<Anime | null>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,13 +26,20 @@ export default function AnimeDetail() {
   }, [id, user]);
 
   const loadDetails = async (animeId: number) => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await fetchAnimeDetails(animeId);
       setAnime(data);
       const reviewsData = await fetchAnimeReviews(animeId);
       setReviews(reviewsData.slice(0, 3)); // show top 3
-    } catch (error) {
-      console.error(error);
+    } catch (err: any) {
+      console.error(err);
+      let msg = err.message || "Error al cargar detalles";
+      if (msg.includes("504") || msg.includes("500") || msg.includes("Failed to fetch")) {
+        msg = "El servidor de Anime (Jikan) no responde. Intenta de nuevo más tarde.";
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -93,6 +101,20 @@ export default function AnimeDetail() {
       handleFirestoreError(error, OperationType.DELETE, path);
     }
   };
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
+        <p className="text-red-400 font-medium">{error}</p>
+        <button 
+          onClick={() => loadDetails(Number(id))}
+          className="px-6 py-2.5 bg-indigo-600 rounded-xl text-sm font-bold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !anime) {
     return (
@@ -172,6 +194,25 @@ export default function AnimeDetail() {
           {anime.synopsis || 'Sinopsis no disponible.'}
         </p>
       </div>
+
+      {anime.streaming && anime.streaming.length > 0 && (
+        <div className="space-y-3 bg-slate-900/50 p-4 rounded-3xl border border-slate-800">
+          <h3 className="font-bold text-lg text-indigo-400">Dónde ver</h3>
+          <div className="flex flex-wrap gap-2">
+            {anime.streaming.map((platform, idx) => (
+              <a
+                key={idx}
+                href={platform.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-medium text-slate-300 transition-colors border border-slate-700 flex items-center gap-1.5"
+              >
+                {platform.name}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {reviews.length > 0 && (
         <div className="space-y-4 pt-4">
