@@ -7,6 +7,75 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { ArrowLeft, Star, Calendar as CalendarIcon, Clock, Tv, Plus, Check, Bookmark } from 'lucide-react';
 import { motion } from 'motion/react';
 
+function createAnimeSnapshot(anime: Anime): Anime {
+  const imageUrl = anime.images?.jpg?.image_url || '';
+  const largeImageUrl = anime.images?.jpg?.large_image_url || imageUrl;
+
+  return {
+    mal_id: anime.mal_id,
+    title: anime.title || 'Sin titulo',
+    images: {
+      jpg: {
+        image_url: imageUrl,
+        large_image_url: largeImageUrl
+      }
+    },
+    synopsis: anime.synopsis || '',
+    score: anime.score || 0,
+    episodes: anime.episodes || 0,
+    status: anime.status || '',
+    airing: Boolean(anime.airing),
+    aired: {
+      from: anime.aired?.from || '',
+      to: anime.aired?.to || '',
+      string: anime.aired?.string || ''
+    },
+    broadcast: {
+      day: anime.broadcast?.day || '',
+      time: anime.broadcast?.time || '',
+      timezone: anime.broadcast?.timezone || '',
+      string: anime.broadcast?.string || ''
+    },
+    streaming: (anime.streaming || []).map(platform => ({
+      name: platform.name || '',
+      url: platform.url || ''
+    }))
+  };
+}
+
+function getAnimeFromListItem(data: any, animeId: number): Anime {
+  const stored = data.anime || {};
+  const imageUrl =
+    stored.images?.jpg?.image_url ||
+    stored.images?.jpg?.large_image_url ||
+    data.image_url ||
+    '';
+  const largeImageUrl =
+    stored.images?.jpg?.large_image_url ||
+    stored.images?.jpg?.image_url ||
+    data.image_url ||
+    '';
+
+  return createAnimeSnapshot({
+    mal_id: stored.mal_id || data.mal_id || animeId,
+    title: stored.title || data.title || 'Anime guardado',
+    images: {
+      jpg: {
+        image_url: imageUrl,
+        large_image_url: largeImageUrl
+      }
+    },
+    synopsis: stored.synopsis || data.synopsis || '',
+    score: stored.score || data.score || 0,
+    episodes: stored.episodes || data.episodes || 0,
+    status: stored.status || data.animeStatus || '',
+    airing: stored.airing ?? data.airing ?? false,
+    aired: stored.aired || data.aired || { from: '', to: '', string: '' },
+    broadcast: stored.broadcast || data.broadcast || { day: '', time: '', timezone: '', string: '' },
+    streaming: stored.streaming || data.streaming || []
+  });
+}
+
 export default function AnimeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -21,19 +90,44 @@ export default function AnimeDetail() {
 
   useEffect(() => {
     if (id) {
-      loadDetails(Number(id));
-      if (user) checkSavedStatus(Number(id));
+      void loadDetails(Number(id));
     }
   }, [id, user]);
 
   const loadDetails = async (animeId: number) => {
     setLoading(true);
     setError(null);
+    setSavedStatus(null);
+    setReviews([]);
+
     try {
+      if (user) {
+        const path = `users/${user.uid}/animeList/${animeId}`;
+        try {
+          const docRef = doc(db, 'users', user.uid, 'animeList', String(animeId));
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            const savedItem = docSnap.data();
+            setSavedStatus(savedItem.status || null);
+            setAnime(getAnimeFromListItem(savedItem, animeId));
+            return;
+          }
+        } catch (firestoreError) {
+          console.error(firestoreError);
+          try {
+            handleFirestoreError(firestoreError, OperationType.GET, path);
+          } catch {
+            // The user-facing error below is intentionally concise.
+          }
+          throw new Error('No se pudo cargar el anime guardado desde Firestore.');
+        }
+      }
+
       const data = await fetchAnimeDetails(animeId);
       setAnime(data);
       const reviewsData = await fetchAnimeReviews(animeId);
-      setReviews(reviewsData.slice(0, 3)); // show top 3
+      setReviews(reviewsData.slice(0, 3));
     } catch (err: any) {
       console.error(err);
       let msg = err.message || "Error al cargar detalles";
@@ -43,21 +137,6 @@ export default function AnimeDetail() {
       setError(msg);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const checkSavedStatus = async (animeId: number) => {
-    if (!user) return;
-    const path = `users/${user.uid}/animeList/${animeId}`;
-    try {
-      const docRef = doc(db, 'users', user.uid, 'animeList', String(animeId));
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setSavedStatus(docSnap.data().status);
-      }
-    } catch (error) {
-      console.error(error);
-      handleFirestoreError(error, OperationType.GET, path);
     }
   };
 
@@ -72,18 +151,23 @@ export default function AnimeDetail() {
     const path = `users/${user.uid}/animeList/${anime.mal_id}`;
     try {
       const docRef = doc(db, 'users', user.uid, 'animeList', String(anime.mal_id));
+      const animeSnapshot = createAnimeSnapshot(anime);
       await setDoc(docRef, {
-        mal_id: anime.mal_id,
-        title: anime.title,
-        image_url: anime.images.jpg.large_image_url,
-        episodes: anime.episodes,
-        status: status,
-        airing: anime.airing ?? false,
-        animeStatus: anime.status ?? '',
-        broadcast: anime.broadcast,
-        score: anime.score,
+        mal_id: animeSnapshot.mal_id,
+        title: animeSnapshot.title,
+        image_url: animeSnapshot.images.jpg.large_image_url,
+        episodes: animeSnapshot.episodes,
+        status,
+        airing: animeSnapshot.airing,
+        animeStatus: animeSnapshot.status,
+        broadcast: animeSnapshot.broadcast,
+        score: animeSnapshot.score,
+        synopsis: animeSnapshot.synopsis,
+        aired: animeSnapshot.aired,
+        streaming: animeSnapshot.streaming,
+        anime: animeSnapshot,
         addedAt: new Date().toISOString()
-      });
+      }, { merge: true });
       setSavedStatus(status);
     } catch (error) {
       console.error(error);

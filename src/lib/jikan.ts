@@ -174,8 +174,6 @@ function getFallbackSeasonalAnimeForSeason(year: number, season: string, page: n
   };
 }
 
-type AniListSeason = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
-
 interface AniListDate {
   year: number | null;
   month: number | null;
@@ -194,8 +192,8 @@ interface AniListMedia {
   endDate: AniListDate;
 }
 
-const CURRENT_SEASON_QUERY = `
-  query CurrentSeason($page: Int!, $season: MediaSeason!, $year: Int!) {
+const AIRING_ANIME_QUERY = `
+  query AiringAnime($page: Int!, $startedAfter: FuzzyDateInt!) {
     Page(page: $page, perPage: 25) {
       pageInfo {
         currentPage
@@ -204,8 +202,8 @@ const CURRENT_SEASON_QUERY = `
       }
       media(
         type: ANIME
-        season: $season
-        seasonYear: $year
+        status: RELEASING
+        startDate_greater: $startedAfter
         isAdult: false
         sort: [POPULARITY_DESC]
       ) {
@@ -223,12 +221,20 @@ const CURRENT_SEASON_QUERY = `
   }
 `;
 
-function getCurrentAniListSeason(date = new Date()): { season: AniListSeason; year: number } {
-  const seasons: AniListSeason[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
-  return {
-    season: seasons[Math.floor(date.getMonth() / 3)],
-    year: date.getFullYear()
-  };
+function getPreviousSeasonBoundary(date = new Date()): number {
+  const currentSeasonStartMonth = Math.floor(date.getMonth() / 3) * 3;
+  const previousSeasonStart = new Date(Date.UTC(
+    date.getFullYear(),
+    currentSeasonStartMonth - 3,
+    1
+  ));
+  previousSeasonStart.setUTCDate(previousSeasonStart.getUTCDate() - 1);
+
+  return (
+    previousSeasonStart.getUTCFullYear() * 10000 +
+    (previousSeasonStart.getUTCMonth() + 1) * 100 +
+    previousSeasonStart.getUTCDate()
+  );
 }
 
 function formatAniListDate(date: AniListDate): string {
@@ -276,9 +282,9 @@ function mapAniListAnime(media: AniListMedia): Anime | null {
   };
 }
 
-async function fetchAniListCurrentSeason(page: number): Promise<PaginatedResult<Anime>> {
-  const { season, year } = getCurrentAniListSeason();
-  const cacheKey = `anilist:current-season:${year}:${season}:${page}`;
+async function fetchAniListAiringAnime(page: number): Promise<PaginatedResult<Anime>> {
+  const startedAfter = getPreviousSeasonBoundary();
+  const cacheKey = `anilist:airing:${startedAfter}:${page}`;
   const cached = cache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -302,8 +308,8 @@ async function fetchAniListCurrentSeason(page: number): Promise<PaginatedResult<
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: CURRENT_SEASON_QUERY,
-            variables: { page, season, year }
+            query: AIRING_ANIME_QUERY,
+            variables: { page, startedAfter }
           }),
           signal: controller.signal
         });
@@ -357,7 +363,7 @@ async function fetchAniListCurrentSeason(page: number): Promise<PaginatedResult<
 
 export async function fetchCurrentSeason(page: number = 1): Promise<PaginatedResult<Anime>> {
   try {
-    return await fetchAniListCurrentSeason(page);
+    return await fetchAniListAiringAnime(page);
   } catch (aniListError) {
     // Do not mix providers after page 1 because their ordering and pagination differ.
     if (page > 1) throw aniListError;

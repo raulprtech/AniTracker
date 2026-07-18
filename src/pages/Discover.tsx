@@ -400,7 +400,7 @@ export default function Discover() {
               <FilterButton 
                 active={filterType === 'now'} 
                 onClick={() => handleFilterChange('now')}
-                label="Esta Temporada"
+                label="En Emisión"
               />
               <FilterButton 
                 active={filterType === 'last'} 
