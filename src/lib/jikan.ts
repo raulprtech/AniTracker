@@ -200,16 +200,16 @@ export async function fetchSeason(year: number, season: string, page: number = 1
   }
 }
 
-export async function fetchTopAnime(page: number = 1): Promise<PaginatedResult<Anime>> {
+export async function fetchPopularAnime(page: number = 1): Promise<PaginatedResult<Anime>> {
   try {
-    const data = await fetchWithRetry(`${API_URL}/top/anime?limit=25&page=${page}`);
+    const data = await fetchWithRetry(`${API_URL}/anime?order_by=popularity&sort=asc&limit=25&page=${page}`);
     const list: Anime[] = data.data || [];
     return { 
       data: list.filter((v, i, a) => a.findIndex(t => t.mal_id === v.mal_id) === i),
       pagination: data.pagination || { last_visible_page: 1, has_next_page: false }
     };
   } catch (error) {
-    console.warn(`Using fallback top anime data for fetchTopAnime page ${page}`);
+    console.warn(`Using fallback anime data for fetchPopularAnime page ${page}`);
     const limit = 25;
     const startIndex = (page - 1) * limit;
     const data = FALLBACK_ANIME_DATA.slice(startIndex, startIndex + limit) as unknown as Anime[];

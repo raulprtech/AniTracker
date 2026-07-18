@@ -4,7 +4,7 @@ import {
   fetchCurrentSeason, 
   searchAnime, 
   fetchSeason, 
-  fetchTopAnime, 
+  fetchPopularAnime,
   fetchGenres, 
   fetchAnimeByGenre,
   Anime,
@@ -14,7 +14,7 @@ import { Search as SearchIcon, Star, Tv, Filter, ChevronRight, Loader2 } from 'l
 import { motion, AnimatePresence } from 'motion/react';
 import SkeletonAnimeCard from '../components/SkeletonAnimeCard';
 
-type FilterType = 'now' | 'last' | 'top' | 'genre';
+type FilterType = 'now' | 'last' | 'popular' | 'genre' | 'search';
 
 const SEASON_NAMES: Record<string, string> = {
   winter: 'Invierno',
@@ -30,6 +30,7 @@ export default function Discover() {
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [query, setQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('now');
   const [genres, setGenres] = useState<any[]>([]);
   const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
@@ -37,10 +38,9 @@ export default function Discover() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(true);
-  const [activeYear, setActiveYear] = useState<number | null>(null);
-  const [activeSeason, setActiveSeason] = useState<'winter' | 'spring' | 'summer' | 'fall' | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const requestGenerationRef = useRef(0);
 
   // Lazily fetch genres in the background after mounting so it doesn't block the initial anime list load
   useEffect(() => {
@@ -61,22 +61,24 @@ export default function Discover() {
   }, []);
 
   const loadInitialData = async () => {
+    const requestGeneration = ++requestGenerationRef.current;
     setLoading(true);
     setError(null);
     setPage(1);
-    setActiveYear(null);
-    setActiveSeason(null);
+    setSubmittedQuery('');
     
     try {
       // ONLY fetch current season initially to load instantly and avoid Jikan concurrent rate limits
       const res = await fetchCurrentSeason(1);
 
+      if (requestGeneration !== requestGenerationRef.current) return;
       if (res && res.data) {
         const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
         setAnimes(uniqueData);
-        setHasNextPage(true); // Always true for seasonal content to allow loading previous seasons on scroll
+        setHasNextPage(res.pagination.has_next_page);
       }
     } catch (err: any) {
+      if (requestGeneration !== requestGenerationRef.current) return;
       console.error("Error loading initial data:", err);
       let msg = err.message || "Error al cargar los datos";
       if (msg.includes("504") || msg.includes("500") || msg.includes("Failed to fetch")) {
@@ -84,7 +86,9 @@ export default function Discover() {
       }
       setError(msg);
     } finally {
-      setLoading(false);
+      if (requestGeneration === requestGenerationRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -115,42 +119,35 @@ export default function Discover() {
 
   const fetchWithCurrentState = useCallback(async (pageNum: number) => {
     let res: PaginatedResult<Anime>;
-    if (query.trim()) {
-      res = await searchAnime(query, pageNum);
+    if (filterType === 'search' && submittedQuery) {
+      res = await searchAnime(submittedQuery, pageNum);
     } else if (filterType === 'now') {
-      if (activeYear && activeSeason) {
-        res = await fetchSeason(activeYear, activeSeason, pageNum);
-      } else {
-        res = await fetchCurrentSeason(pageNum);
-      }
+      res = await fetchCurrentSeason(pageNum);
     } else if (filterType === 'last') {
-      if (activeYear && activeSeason) {
-        res = await fetchSeason(activeYear, activeSeason, pageNum);
-      } else {
-        const prev = getPreviousSeason();
-        res = await fetchSeason(prev.year, prev.season, pageNum);
-      }
-    } else if (filterType === 'top') {
-      res = await fetchTopAnime(pageNum);
+      const prev = getPreviousSeason();
+      res = await fetchSeason(prev.year, prev.season, pageNum);
+    } else if (filterType === 'popular') {
+      res = await fetchPopularAnime(pageNum);
     } else if (filterType === 'genre' && selectedGenre) {
       res = await fetchAnimeByGenre(selectedGenre, pageNum);
     } else {
-      res = await fetchCurrentSeason(pageNum); // fallback
+      res = await fetchCurrentSeason(pageNum);
     }
     return res;
-  }, [query, filterType, selectedGenre, activeYear, activeSeason]);
+  }, [filterType, selectedGenre, submittedQuery]);
 
-  const handleFilterChange = async (type: FilterType, genreId?: number) => {
+  const handleFilterChange = async (type: Exclude<FilterType, 'search'>, genreId?: number) => {
+    const requestGeneration = ++requestGenerationRef.current;
     setFilterType(type);
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
     setQuery('');
+    setSubmittedQuery('');
     setPage(1);
-    setActiveYear(null);
-    setActiveSeason(null);
-    
+
     try {
-      if (type === 'now' || type === 'last' || type === 'top') {
+      if (type === 'now' || type === 'last' || type === 'popular') {
         setSelectedGenre(null);
       } else if (type === 'genre' && genreId) {
         setSelectedGenre(genreId);
@@ -162,22 +159,20 @@ export default function Discover() {
       } else if (type === 'last') {
         const prev = getPreviousSeason();
         res = await fetchSeason(prev.year, prev.season, 1);
-      } else if (type === 'top') {
-        res = await fetchTopAnime(1);
+      } else if (type === 'popular') {
+        res = await fetchPopularAnime(1);
       } else if (type === 'genre' && genreId) {
         res = await fetchAnimeByGenre(genreId, 1);
       } else {
         res = await fetchCurrentSeason(1);
       }
 
+      if (requestGeneration !== requestGenerationRef.current) return;
       const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
       setAnimes(uniqueData);
-      if (type === 'now' || type === 'last') {
-        setHasNextPage(true); // Always true for seasonal content to allow loading previous seasons on scroll
-      } else {
-        setHasNextPage(res.pagination.has_next_page);
-      }
+      setHasNextPage(res.pagination.has_next_page);
     } catch (err: any) {
+      if (requestGeneration !== requestGenerationRef.current) return;
       console.error(err);
       let msg = err.message || "Error al cargar los datos";
       if (msg.includes("504") || msg.includes("500") || msg.includes("Failed to fetch")) {
@@ -185,7 +180,9 @@ export default function Discover() {
       }
       setError(msg);
     } finally {
-      setLoading(false);
+      if (requestGeneration === requestGenerationRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -194,42 +191,23 @@ export default function Discover() {
     setLoadingMore(true);
     setLoadMoreError(null);
     const nextPage = page + 1;
-    
+    const requestGeneration = requestGenerationRef.current;
+
     try {
       const res = await fetchWithCurrentState(nextPage);
+      if (requestGeneration !== requestGenerationRef.current) return;
       setAnimes(prev => {
-        const uniqueNew = res.data.filter((a, i, self) => 
+        const uniqueNew = res.data.filter((a, i, self) =>
           self.findIndex(t => t.mal_id === a.mal_id) === i
         );
         const newAnimes = uniqueNew.filter(a => !prev.some(p => p.mal_id === a.mal_id));
         return [...prev, ...newAnimes];
       });
-      
-      if (res.pagination.has_next_page) {
-        setHasNextPage(true);
-        setPage(nextPage);
-      } else {
-        if (filterType === 'now' || filterType === 'last') {
-          let currentSeasonInfo = activeYear && activeSeason 
-            ? { year: activeYear, season: activeSeason }
-            : getCurrentSeasonAndYear();
-            
-          if (filterType === 'last' && !activeYear && !activeSeason) {
-             currentSeasonInfo = getPreviousSeason();
-          }
-            
-          const prevSeasonInfo = getPreviousSeasonBefore(currentSeasonInfo.year, currentSeasonInfo.season);
-          
-          setActiveYear(prevSeasonInfo.year);
-          setActiveSeason(prevSeasonInfo.season);
-          setPage(0); // reset page to 0 so next load is page 1 of new season
-          setHasNextPage(true);
-        } else {
-          setHasNextPage(false);
-          setPage(nextPage);
-        }
-      }
+
+      setHasNextPage(res.pagination.has_next_page);
+      setPage(nextPage);
     } catch (error: any) {
+      if (requestGeneration !== requestGenerationRef.current) return;
       console.error("Error loading more:", error);
       let msg = "Error al cargar más datos";
       if (error?.message?.includes("504") || error?.message?.includes("500") || error?.message?.includes("Failed to fetch")) {
@@ -239,9 +217,11 @@ export default function Discover() {
       }
       setLoadMoreError(msg);
     } finally {
-      setLoadingMore(false);
+      if (requestGeneration === requestGenerationRef.current) {
+        setLoadingMore(false);
+      }
     }
-  }, [page, loadingMore, hasNextPage, fetchWithCurrentState, filterType, activeYear, activeSeason]);
+  }, [page, loadingMore, hasNextPage, fetchWithCurrentState]);
 
   useEffect(() => {
     if (loading) return;
@@ -263,25 +243,24 @@ export default function Discover() {
     };
   }, [loading, hasNextPage, loadingMore, loadMore]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) {
-      handleFilterChange('now');
-      return;
-    }
+  const executeSearch = async (searchTerm: string) => {
+    const requestGeneration = ++requestGenerationRef.current;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
-    setFilterType('now'); // Reset filters on search
+    setFilterType('search');
+    setSubmittedQuery(searchTerm);
     setSelectedGenre(null);
     setPage(1);
-    setActiveYear(null);
-    setActiveSeason(null);
+
     try {
-      const res = await searchAnime(query, 1);
+      const res = await searchAnime(searchTerm, 1);
+      if (requestGeneration !== requestGenerationRef.current) return;
       const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
       setAnimes(uniqueData);
       setHasNextPage(res.pagination.has_next_page);
     } catch (err: any) {
+      if (requestGeneration !== requestGenerationRef.current) return;
       console.error(err);
       let msg = err.message || "Error al buscar";
       if (msg.includes("504") || msg.includes("500") || msg.includes("Failed to fetch")) {
@@ -289,8 +268,20 @@ export default function Discover() {
       }
       setError(msg);
     } finally {
-      setLoading(false);
+      if (requestGeneration === requestGenerationRef.current) {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const searchTerm = query.trim();
+    if (!searchTerm) {
+      void handleFilterChange('now');
+      return;
+    }
+    void executeSearch(searchTerm);
   };
 
   return (
@@ -358,8 +349,8 @@ export default function Discover() {
                 label="Temporada Anterior"
               />
               <FilterButton 
-                active={filterType === 'top'} 
-                onClick={() => handleFilterChange('top')}
+                active={filterType === 'popular'}
+                onClick={() => handleFilterChange('popular')}
                 label="Más Populares"
               />
             </div>
@@ -398,8 +389,12 @@ export default function Discover() {
           <p className="text-red-400 font-medium">{error}</p>
           <button 
             onClick={() => {
-              if (query.trim()) handleSearch({ preventDefault: () => {} } as React.FormEvent);
-              else handleFilterChange(filterType, selectedGenre || undefined);
+              if (filterType === 'search') {
+                if (submittedQuery) void executeSearch(submittedQuery);
+                else void handleFilterChange('now');
+              } else {
+                void handleFilterChange(filterType, selectedGenre || undefined);
+              }
             }}
             className="px-6 py-2.5 bg-indigo-600 rounded-xl text-sm font-bold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
           >
