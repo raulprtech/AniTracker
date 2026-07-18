@@ -552,6 +552,69 @@ async function fetchAniListAiringDetails(
   }
 }
 
+const ANILIST_AIRING_BATCH_QUERY = `
+  query AiringDetails($ids: [Int!]!) {
+    Page(page: 1, perPage: 50) {
+      media(idMal_in: $ids, type: ANIME) {
+        idMal
+        nextAiringEpisode { airingAt episode }
+        siteUrl
+      }
+    }
+  }
+`;
+
+export interface AiringDetailsUpdate {
+  nextAiringEpisode: { airingAt: number; episode: number } | null;
+  airingSourceUrl: string;
+}
+
+export async function fetchAiringDetailsBatch(
+  ids: number[]
+): Promise<Record<number, AiringDetailsUpdate>> {
+  const uniqueIds = [...new Set(ids.filter(id => Number.isInteger(id) && id > 0))];
+  const updates: Record<number, AiringDetailsUpdate> = {};
+
+  for (let index = 0; index < uniqueIds.length; index += 50) {
+    const chunk = uniqueIds.slice(index, index + 50);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    try {
+      const response = await fetch(ANILIST_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: ANILIST_AIRING_BATCH_QUERY,
+          variables: { ids: chunk }
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`AniList API Error: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      if (payload.errors?.length) {
+        throw new Error(payload.errors[0].message || 'AniList GraphQL Error');
+      }
+
+      for (const media of payload.data?.Page?.media || []) {
+        if (!media.idMal) continue;
+        updates[media.idMal] = {
+          nextAiringEpisode: media.nextAiringEpisode || null,
+          airingSourceUrl: media.siteUrl || ''
+        };
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  return updates;
+}
+
 export async function fetchAnimeDetails(id: number): Promise<Anime> {
   try {
     const [data, airingDetails] = await Promise.all([

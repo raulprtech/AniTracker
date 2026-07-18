@@ -256,14 +256,14 @@ export default function AnimeDetail() {
               <Clock size={12} className="text-indigo-400 mt-0.5 shrink-0" />
               <div className="space-y-1">
                 <p>{localAiring.dateLabel}, {localAiring.timeLabel}</p>
-                <p className="text-[10px] text-slate-500">{localAiring.timeZone}</p>
+                <p className="text-[10px] text-slate-500">Emisión original - {localAiring.timeZone}</p>
                 <a
                   href={localAiring.verificationUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300"
                 >
-                  Verificar en {localAiring.sourceLabel}
+                  Ver origen en {localAiring.sourceLabel}
                   <ExternalLink size={10} />
                 </a>
               </div>
