@@ -30,10 +30,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async () => {
     try {
+      if (window.self !== window.top) {
+        alert('Por favor, abre la aplicación en una nueva pestaña (icono de flecha arriba a la derecha) para iniciar sesión, ya que los navegadores bloquean las ventanas emergentes dentro de iframes.');
+        return;
+      }
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      if (error?.code === 'auth/unauthorized-domain') {
+         alert('Error: Este dominio no está autorizado en Firebase. Ve a Firebase Console > Authentication > Settings > Authorized domains y añade el dominio actual.');
+      } else {
+         alert(`Error al iniciar sesión: ${error?.message || 'Desconocido'}`);
+      }
     }
   };
 

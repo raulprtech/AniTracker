@@ -1,18 +1,19 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import config from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
-  projectId: "gen-lang-client-0264382633",
-  appId: "1:249181663722:web:9714ca9c89747c486d0293",
-  apiKey: "AIzaSyDKos_xpMeTVc0NRUWdkmBTkVB32gvLOj8",
-  authDomain: "gen-lang-client-0264382633.firebaseapp.com",
-  storageBucket: "gen-lang-client-0264382633.firebasestorage.app",
-  messagingSenderId: "249181663722",
+  projectId: config.projectId,
+  appId: config.appId,
+  apiKey: config.apiKey,
+  authDomain: config.authDomain,
+  storageBucket: config.storageBucket,
+  messagingSenderId: config.messagingSenderId,
 };
 
 export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, "ai-studio-b9f70b49-8abb-4b9c-bae3-1df227488c01");
+export const db = getFirestore(app, config.firestoreDatabaseId || "(default)");
 export const auth = getAuth(app);
 
 export enum OperationType {
