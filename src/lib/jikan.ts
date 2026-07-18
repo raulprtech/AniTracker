@@ -24,6 +24,7 @@ export interface Pagination {
 export interface PaginatedResult<T> {
   data: T[];
   pagination: Pagination;
+  fromFallback?: boolean;
 }
 
 // Simple memory cache
@@ -54,7 +55,7 @@ async function processQueue() {
 }
 
 // Helper to handle rate limits and timeouts (Jikan returns 429 or times out)
-async function fetchWithRetry(url: string, retries = 4, delay = 1000): Promise<any> {
+async function fetchWithRetry(url: string, retries = 4, delay = 1000, timeoutMs = 15000): Promise<any> {
   const cached = cache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data;
@@ -70,7 +71,7 @@ async function fetchWithRetry(url: string, retries = 4, delay = 1000): Promise<a
       try {
         const attemptFetch = async (currentRetries: number, currentDelay: number): Promise<any> => {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout to prevent hanging
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
           try {
             const res = await fetch(url, { signal: controller.signal });
@@ -125,7 +126,7 @@ async function fetchWithRetry(url: string, retries = 4, delay = 1000): Promise<a
   return activePromise;
 }
 
-function getFallbackSeasonalAnimePage(page: number): PaginatedResult<Anime> {
+export function getFallbackSeasonalAnimePage(page: number): PaginatedResult<Anime> {
   const items = FALLBACK_CURRENT_SEASON_ANIME;
   const limit = 25;
   const startIndex = (page - 1) * limit;
@@ -174,7 +175,12 @@ function getFallbackSeasonalAnimeForSeason(year: number, season: string, page: n
 
 export async function fetchCurrentSeason(page: number = 1): Promise<PaginatedResult<Anime>> {
   try {
-    const data = await fetchWithRetry(`${API_URL}/seasons/now?limit=25&page=${page}`);
+    const data = await fetchWithRetry(
+      `${API_URL}/seasons/now?limit=25&page=${page}`,
+      page === 1 ? 1 : 2,
+      page === 1 ? 500 : 800,
+      page === 1 ? 5000 : 8000
+    );
     const list: Anime[] = data.data || [];
     return { 
       data: list.filter((v, i, a) => a.findIndex(t => t.mal_id === v.mal_id) === i),
@@ -182,7 +188,15 @@ export async function fetchCurrentSeason(page: number = 1): Promise<PaginatedRes
     };
   } catch (error) {
     console.warn(`Using fallback current season anime data for fetchCurrentSeason page ${page}`);
-    return getFallbackSeasonalAnimePage(page);
+    const fallback = getFallbackSeasonalAnimePage(page);
+    if (fallback.data.length > 0) {
+      return {
+        ...fallback,
+        fromFallback: true,
+        pagination: { ...fallback.pagination, has_next_page: true }
+      };
+    }
+    throw error;
   }
 }
 

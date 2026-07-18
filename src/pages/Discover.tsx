@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   fetchCurrentSeason, 
+  getFallbackSeasonalAnimePage,
   searchAnime, 
   fetchSeason, 
   fetchPopularAnime,
@@ -60,15 +61,67 @@ export default function Discover() {
     loadInitialData();
   }, []);
 
+  const preloadCurrentSeason = useCallback(async (startPage: number, requestGeneration: number) => {
+    let currentPage = startPage;
+    let hasMore = true;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+
+    try {
+      while (hasMore && requestGeneration === requestGenerationRef.current) {
+        const nextPage = currentPage + 1;
+        const res = await fetchCurrentSeason(nextPage);
+        if (requestGeneration !== requestGenerationRef.current) return;
+
+        setAnimes(prev => {
+          const uniqueNew = res.data.filter((anime, index, self) =>
+            self.findIndex(item => item.mal_id === anime.mal_id) === index
+          );
+          return [
+            ...prev,
+            ...uniqueNew.filter(anime => !prev.some(item => item.mal_id === anime.mal_id))
+          ];
+        });
+
+        currentPage = nextPage;
+        hasMore = res.pagination.has_next_page;
+        setPage(currentPage);
+        setHasNextPage(hasMore);
+      }
+    } catch (error: any) {
+      if (requestGeneration !== requestGenerationRef.current) return;
+      console.error("Error preloading current season:", error);
+      let message = "No se pudieron cargar todos los animes de la temporada.";
+      if (error?.message?.includes("429")) {
+        message = "Limite de peticiones alcanzado. Reintenta en unos segundos.";
+      } else if (
+        error?.message?.includes("504") ||
+        error?.message?.includes("500") ||
+        error?.message?.includes("Failed to fetch")
+      ) {
+        message = "Jikan no respondio al cargar la temporada completa. Puedes reintentar.";
+      }
+      setLoadMoreError(message);
+      setHasNextPage(true);
+    } finally {
+      if (requestGeneration === requestGenerationRef.current) {
+        setLoadingMore(false);
+      }
+    }
+  }, []);
+
   const loadInitialData = async () => {
     const requestGeneration = ++requestGenerationRef.current;
-    setLoading(true);
     setError(null);
     setPage(1);
     setSubmittedQuery('');
-    
+
+    const fallback = getFallbackSeasonalAnimePage(1);
+    setAnimes(fallback.data);
+    setHasNextPage(true);
+    setLoading(false);
+
     try {
-      // ONLY fetch current season initially to load instantly and avoid Jikan concurrent rate limits
       const res = await fetchCurrentSeason(1);
 
       if (requestGeneration !== requestGenerationRef.current) return;
@@ -76,6 +129,9 @@ export default function Discover() {
         const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
         setAnimes(uniqueData);
         setHasNextPage(res.pagination.has_next_page);
+        if (res.pagination.has_next_page) {
+          void preloadCurrentSeason(res.fromFallback ? 0 : 1, requestGeneration);
+        }
       }
     } catch (err: any) {
       if (requestGeneration !== requestGenerationRef.current) return;
@@ -171,6 +227,9 @@ export default function Discover() {
       const uniqueData = res.data.filter((a, i, self) => self.findIndex(t => t.mal_id === a.mal_id) === i);
       setAnimes(uniqueData);
       setHasNextPage(res.pagination.has_next_page);
+      if (type === 'now' && res.pagination.has_next_page) {
+        void preloadCurrentSeason(res.fromFallback ? 0 : 1, requestGeneration);
+      }
     } catch (err: any) {
       if (requestGeneration !== requestGenerationRef.current) return;
       console.error(err);
