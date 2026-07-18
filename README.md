@@ -1,20 +1,41 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Anime Discovery App
 
-# Run and deploy your AI Studio app
+A modern, responsive web application for discovering and tracking anime. Built with React, TypeScript, and Tailwind CSS.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/b9f70b49-8abb-4b9c-bae3-1df227488c01
+- **Discover Anime**: Browse the current season's anime, top-rated anime, and search by genre or title using the [Jikan API](https://jikan.moe/) (an unofficial MyAnimeList API).
+- **Infinite Scrolling**: Seamlessly load more anime as you scroll through the Discover page.
+- **User Authentication**: Secure sign-in with Google using Firebase Authentication.
+- **Personalized Lists**: Authenticated users can save anime to their personal list and track their watching progress (powered by Firebase Firestore).
+- **Responsive Design**: A clean, dark-mode focused UI that looks great on desktop and mobile devices.
 
-## Run Locally
+## Tech Stack
 
-**Prerequisites:**  Node.js
+- **Frontend Framework**: React with TypeScript, bundled by Vite.
+- **Styling**: Tailwind CSS for utility-first styling and a modern, cohesive look.
+- **Backend & Database**: Firebase Authentication for user management and Firestore for storing personal anime lists.
+- **Icons**: Lucide React for consistent and crisp iconography.
+- **API**: Integrates with the Jikan REST API for fetching up-to-date anime data.
 
+## Getting Started
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. **Install Dependencies**:
+   \`\`\`bash
+   npm install
+   \`\`\`
+
+2. **Set Up Firebase**:
+   - Create a Firebase project and enable Authentication (Google Provider) and Firestore.
+   - Update the Firebase configuration in your environment or configuration files.
+
+3. **Start the Development Server**:
+   \`\`\`bash
+   npm run dev
+   \`\`\`
+
+## Architecture Notes
+
+- The app uses client-side rendering with React.
+- Fallback data is implemented to ensure the application remains functional even if the external Jikan API is rate-limited or temporarily unavailable.
+- Firebase is used to seamlessly sync user lists across devices.
