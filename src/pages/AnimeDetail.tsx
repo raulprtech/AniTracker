@@ -4,7 +4,7 @@ import { fetchAnimeDetails, fetchAnimeReviews, Anime } from '../lib/jikan';
 import { useAuth } from '../hooks/useAuth';
 import { doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { ArrowLeft, Star, Calendar as CalendarIcon, Clock, Tv, Plus, Check, Bookmark, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Star, Calendar as CalendarIcon, Clock, Tv, Plus, Check, Bookmark } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getLocalAiringInfo } from '../lib/airingTime';
 
@@ -256,16 +256,6 @@ export default function AnimeDetail() {
               <Clock size={12} className="text-indigo-400 mt-0.5 shrink-0" />
               <div className="space-y-1">
                 <p>{localAiring.dateLabel}, {localAiring.timeLabel}</p>
-                <p className="text-[10px] text-slate-500">Emisión original - {localAiring.timeZone}</p>
-                <a
-                  href={localAiring.verificationUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300"
-                >
-                  Ver origen en {localAiring.sourceLabel}
-                  <ExternalLink size={10} />
-                </a>
               </div>
             </div>
           )}

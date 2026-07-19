@@ -3,9 +3,9 @@ import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { Calendar as CalendarIcon, Clock, ExternalLink, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { motion } from 'motion/react';
-import { getLocalAiringInfo, getUserTimeZone, LocalAiringInfo } from '../lib/airingTime';
+import { getLocalAiringInfo, LocalAiringInfo } from '../lib/airingTime';
 import { fetchAiringDetailsBatch } from '../lib/jikan';
 
 interface ScheduleEntry {
@@ -17,9 +17,6 @@ export default function Schedule() {
   const { user, login, loading: authLoading } = useAuth();
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [verificationStatus, setVerificationStatus] = useState<
-    'idle' | 'checking' | 'verified' | 'cached'
-  >('idle');
 
   useEffect(() => {
     if (authLoading) return;
@@ -58,13 +55,10 @@ export default function Schedule() {
       .filter(id => Number.isInteger(id) && id > 0);
     if (ids.length === 0) return;
 
-    setVerificationStatus('checking');
-
     try {
       const updates = await fetchAiringDetailsBatch(ids);
       const updateEntries = Object.entries(updates);
       if (updateEntries.length === 0) {
-        setVerificationStatus('cached');
         return;
       }
 
@@ -88,10 +82,8 @@ export default function Schedule() {
       }
 
       await batch.commit();
-      setVerificationStatus('verified');
     } catch (error) {
       console.warn('Could not refresh airing schedule; using Firestore cache', error);
-      setVerificationStatus('cached');
     }
   };
 
@@ -165,46 +157,12 @@ export default function Schedule() {
     return groups;
   }, {} as Record<string, ScheduleEntry[]>);
 
-  const userTimeZone = getUserTimeZone();
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold tracking-tight">Agenda Semanal</h1>
         <p className="text-sm text-slate-400">Basado en tu lista "Viendo".</p>
-        <p className="text-xs text-indigo-400">
-          Horarios de emisión original convertidos a {userTimeZone}.
-        </p>
-        {verificationStatus === 'checking' && (
-          <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
-            <Loader2 size={12} className="animate-spin" />
-            Corroborando próximas emisiones con AniList...
-          </p>
-        )}
-        {verificationStatus === 'verified' && (
-          <p className="text-[11px] text-green-400">
-            Próximas emisiones originales actualizadas.
-          </p>
-        )}
-        {verificationStatus === 'cached' && (
-          <p className="text-[11px] text-amber-400">
-            Se muestran los horarios guardados; la actualización no estuvo disponible.
-          </p>
-        )}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2">
-          <p className="text-[11px] leading-relaxed text-slate-400">
-            La emisión original puede no coincidir con el día de disponibilidad regional en Crunchyroll.
-          </p>
-          <a
-            href="https://www.crunchyroll.com/simulcastcalendar?filter=premium"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
-          >
-            Consultar calendario regional de Crunchyroll
-            <ExternalLink size={11} />
-          </a>
-        </div>
       </div>
 
       <div className="space-y-8">
@@ -252,25 +210,6 @@ export default function Schedule() {
                         </div>
                       </Link>
 
-                      <div className="border-t border-slate-800 px-4 py-2.5 flex items-start justify-between gap-3">
-                        <div className="text-[10px] text-slate-500 min-w-0">
-                          <p>Emisión original: {airing.sourceLabel}</p>
-                          {airing.originalSchedule && (
-                            <p className="truncate" title={airing.originalSchedule}>
-                              Horario original: {airing.originalSchedule}
-                            </p>
-                          )}
-                        </div>
-                        <a
-                          href={airing.verificationUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 shrink-0"
-                        >
-                          Ver origen
-                          <ExternalLink size={10} />
-                        </a>
-                      </div>
                     </div>
                   ))}
                 </div>
